@@ -292,8 +292,9 @@ function PartnershipModal({onClose,onSubmit}){
   }
   async function pickFile(e){
     const f=e.target.files[0]; if(!f)return;
-    const url=URL.createObjectURL(f);
-    setForm(p=>({...p,fileUrl:url,fileName:f.name,fileSize:f.size}));
+    if(f.size>8*1024*1024){alert("קובץ גדול מדי להעלאה ישירה (מקס 8MB). השתמש בקישור הורדה במקום.");return;}
+    const b64=await fileToB64(f);
+    setForm(p=>({...p,fileUrl:b64,fileName:f.name,fileSize:f.size}));
   }
 
   function validate(){
@@ -419,15 +420,24 @@ function AIChatWidget({settings,onClose}){
     const txt=input.trim(); if(!txt||loading)return;
     const newMsgs=[...msgs,{role:"user",content:txt}];
     setMsgs(newMsgs);setInput("");setLoading(true);
+    if(!settings.aiKey){
+      setMsgs(p=>[...p,{role:"assistant",content:"הצ'אט לא מוגדר עדיין — למנהל צריך להוסיף מפתח API בהגדרות."}]);
+      setLoading(false);return;
+    }
     try{
-      const headers={"Content-Type":"application/json"};
-      if(settings.aiKey) headers["x-api-key"]=settings.aiKey;
       const res=await fetch("https://api.anthropic.com/v1/messages",{
-        method:"POST",headers,
-        body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:1000,system:buildSysPrompt(settings),
+        method:"POST",
+        headers:{
+          "Content-Type":"application/json",
+          "x-api-key":settings.aiKey,
+          "anthropic-version":"2023-06-01",
+          "anthropic-dangerous-direct-browser-access":"true",
+        },
+        body:JSON.stringify({model:"claude-sonnet-4-5",max_tokens:1000,system:buildSysPrompt(settings),
           messages:newMsgs.slice(1).map(m=>({role:m.role,content:m.content}))})
       });
       const data=await res.json();
+      if(!res.ok) throw new Error(data?.error?.message||"שגיאת שרת");
       const reply=data.content?.[0]?.text||"לא הצלחתי לענות.";
       setMsgs(p=>[...p,{role:"assistant",content:reply}]);
     }catch{

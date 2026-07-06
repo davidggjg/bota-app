@@ -281,8 +281,9 @@ function Editor({draft,setDraft,onPublish,onCancel,isEdit}){
 
   async function pickFile(e){
     const f=e.target.files[0]; if(!f)return;
-    const url=URL.createObjectURL(f);
-    setDraft(d=>({...d,fileUrl:url,fileName:f.name,fileSize:f.size}));
+    if(f.size>8*1024*1024){alert("קובץ גדול מדי להעלאה ישירה (מקס 8MB). השתמש בקישור חיצוני במקום.");return;}
+    const b64=await fileToB64(f);
+    setDraft(d=>({...d,fileUrl:b64,fileName:f.name,fileSize:f.size}));
   }
 
   function addPhone(){
@@ -332,8 +333,8 @@ function Editor({draft,setDraft,onPublish,onCancel,isEdit}){
              </div>
             :<div className="upload-zone" onClick={()=>fileRef.current?.click()}>
                <Upload size={22} style={{color:"var(--dim)",margin:"0 auto 8px"}}/>
-               <p style={{color:"var(--dim)",fontSize:".85rem"}}>לחץ לבחירת קובץ (APK, ZIP, עד 1GB)</p>
-               <p style={{color:"var(--dim2)",fontSize:".73rem",marginTop:4}}>הקובץ ישמר בזיכרון הדפדפן לאורך הסשן בלבד</p>
+               <p style={{color:"var(--dim)",fontSize:".85rem"}}>לחץ לבחירת קובץ (עד 8MB)</p>
+               <p style={{color:"var(--dim2)",fontSize:".73rem",marginTop:4}}>קבצים גדולים יותר — השתמש בקישור חיצוני למטה</p>
              </div>}
           <div style={{marginTop:8}}>
             <input value={draft.gatedContent} onChange={e=>setDraft(d=>({...d,gatedContent:e.target.value}))} className="inp" placeholder="עדיף: קישור הורדה חיצוני https://..."/>
