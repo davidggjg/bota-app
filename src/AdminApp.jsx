@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import {
   SK, RK, SETK, UPK, ld, sv, fileToB64, addWatermark, defSettings, defDraft,
-  ghFetchItems, ghSaveItems, CSS
+  ghFetchItems, ghSaveItems, ghSaveSettings, CSS
 } from "./shared.js";
 import { WAIcon, Tog, FRow, Fl, Sec } from "./ui.jsx";
 
@@ -160,7 +160,12 @@ function AdminDashboard({onLock}){
   }
 
   function saveSettings(s){
-    setSettings(s);sv(SETK,s);setToast("הגדרות נשמרו ✓");
+    setSettings(s);sv(SETK,s);
+    if(s.ghOwner&&s.ghRepo&&s.ghToken){
+      ghSaveSettings(s).then(()=>setToast("הגדרות נשמרו ופורסמו ✓")).catch(err=>setToast("⚠️ נשמר מקומית, שגיאת פרסום: "+err.message));
+    } else {
+      setToast("הגדרות נשמרו (מקומית בלבד — הוסף טוקן GitHub כדי לפרסם לכולם)");
+    }
   }
 
   const navItems=[
@@ -511,13 +516,29 @@ function AdminSettings({settings,onSave}){
         <div className="panel" style={{padding:"20px"}}>
           <p style={{fontWeight:700,marginBottom:16,display:"flex",alignItems:"center",gap:8}}><Sparkles size={15} style={{color:"var(--cyan)"}}/>הגדרות AI</p>
           <div style={{display:"flex",flexDirection:"column",gap:12}}>
-            <Fl label="מפתח API (אופציונלי)">
+            <Fl label="ספק AI">
               <div style={{display:"flex",gap:8}}>
-                <input type={showKey?"text":"password"} value={s.aiKey} onChange={e=>setS(p=>({...p,aiKey:e.target.value}))} className="inp" placeholder="sk-ant-..."/>
-                <button onClick={()=>setShowKey(v=>!v)} className="bg" style={{padding:"0 12px",flexShrink:0}}>{showKey?<EyeOff size={15}/>:<Eye size={15}/>}</button>
+                <button type="button" onClick={()=>setS(p=>({...p,aiProvider:"claude"}))} className={s.aiProvider!=="groq"?"bp":"bg"} style={{flex:1,padding:"10px",fontSize:".85rem"}}>Claude (Anthropic)</button>
+                <button type="button" onClick={()=>setS(p=>({...p,aiProvider:"groq"}))} className={s.aiProvider==="groq"?"bp":"bg"} style={{flex:1,padding:"10px",fontSize:".85rem"}}>Groq</button>
               </div>
-              <p style={{color:"var(--dim2)",fontSize:".72rem",marginTop:5}}>ריק = שימוש במפתח של המערכת</p>
             </Fl>
+            {s.aiProvider==="groq"?(
+              <Fl label="Groq API Key">
+                <div style={{display:"flex",gap:8}}>
+                  <input type={showKey?"text":"password"} value={s.groqKey} onChange={e=>setS(p=>({...p,groqKey:e.target.value.trim()}))} className="inp" placeholder="gsk_..."/>
+                  <button onClick={()=>setShowKey(v=>!v)} className="bg" style={{padding:"0 12px",flexShrink:0}}>{showKey?<EyeOff size={15}/>:<Eye size={15}/>}</button>
+                </div>
+                <p style={{color:"var(--dim2)",fontSize:".72rem",marginTop:5}}>מפתח מ-console.groq.com — חובה, אין ברירת מחדל</p>
+              </Fl>
+            ):(
+              <Fl label="Anthropic API Key">
+                <div style={{display:"flex",gap:8}}>
+                  <input type={showKey?"text":"password"} value={s.aiKey} onChange={e=>setS(p=>({...p,aiKey:e.target.value.trim()}))} className="inp" placeholder="sk-ant-..."/>
+                  <button onClick={()=>setShowKey(v=>!v)} className="bg" style={{padding:"0 12px",flexShrink:0}}>{showKey?<EyeOff size={15}/>:<Eye size={15}/>}</button>
+                </div>
+                <p style={{color:"var(--dim2)",fontSize:".72rem",marginTop:5}}>מפתח מ-console.anthropic.com — חובה, אין ברירת מחדל</p>
+              </Fl>
+            )}
             <Fl label="אישיות הצ'אט">
               <input value={s.aiPersonality} onChange={e=>setS(p=>({...p,aiPersonality:e.target.value}))} className="inp" placeholder="ידידותית ותמציתית"/>
             </Fl>

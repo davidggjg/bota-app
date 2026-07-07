@@ -45,7 +45,21 @@ export const buildSysPrompt = s => {
   return p;
 };
 
-export const defSettings = { whatsappLink:"", siteLocked:false, aiKey:"", aiPersonality:"ידידותית ותמציתית", aiRestrictions:"", aiSuffix:"", aiLocked:false, chatEnabled:true, ghOwner:"", ghRepo:"", ghBranch:"main", ghToken:"" };
+/* ── מפתח Groq ציבורי ──
+   מגיע מ-Secret ב-GitHub Actions (VITE_GROQ_KEY) בזמן הבנייה, לא כתוב בקוד המקור.
+   הצ'אט צריך לעבוד לכל מבקר, לא רק במכשיר של המנהל.
+   Groq בחינם אז אין סיכון כספי — הכי גרוע שיקרה זה שהמפתח ייחסם/יוגבל. */
+export const PUBLIC_GROQ_KEY = import.meta.env.VITE_GROQ_KEY || "";
+
+export const defSettings = { whatsappLink:"", siteLocked:false, aiProvider:"groq", aiKey:"", groqKey:PUBLIC_GROQ_KEY, aiPersonality:"ידידותית ותמציתית", aiRestrictions:"", aiSuffix:"", aiLocked:false, chatEnabled:true, ghOwner:"davidggjg", ghRepo:"bota-app", ghBranch:"main", ghToken:"" };
+
+/* ── טוקן ציבורי מוגבל, לשליחת בקשות/העלאות בלבד ──
+   מגיע מ-Secret ב-GitHub Actions (VITE_ISSUES_TOKEN) בזמן הבנייה.
+   זה טוקן נפרד לגמרי מהטוקן הפרטי של המנהל (ghToken למעלה).
+   חובה ליצור אותו כ-Fine-grained PAT עם הרשאת "Issues: Read & write" בלבד
+   (בלי Contents!) על הריפו הזה בלבד. כי הוא נשלח לכל מבקר באתר, מותר לו
+   רק לפתוח Issues — לא לגעת בקוד או בתוכן. */
+export const PUBLIC_ISSUES_TOKEN = import.meta.env.VITE_ISSUES_TOKEN || "";
 export const defDraft = { title:"", description:"", imageUrl:"", imageB64:"", gatedContent:"", fileUrl:"", fileName:"", fileSize:0, allowedPhones:[] };
 
 /* ── GitHub shared database ── */
@@ -95,6 +109,73 @@ export async function ghSaveItems(s, items) {
     throw new Error(err.message || `שגיאת GitHub (${putRes.status})`);
   }
   return true;
+}
+
+/* ── מסד ההגדרות המשותף ──
+   רק שדות "בטוחים לחשיפה" נכתבים כאן (לא aiKey הפרטי ולא ghToken הפרטי) —
+   כי הקובץ הזה ציבורי וכל מבקר יכול לקרוא אותו. */
+export const GH_SETTINGS_PATH = "data/settings.json";
+const PUBLIC_SETTINGS_FIELDS = ["whatsappLink","siteLocked","aiProvider","groqKey","aiPersonality","aiRestrictions","aiSuffix","aiLocked","chatEnabled","ghOwner","ghRepo","ghBranch"];
+
+export async function ghFetchSettings(s) {
+  if (!s?.ghOwner || !s?.ghRepo) return null;
+  const branch = s.ghBranch || "main";
+  const url = `https://raw.githubusercontent.com/${s.ghOwner}/${s.ghRepo}/${branch}/${GH_SETTINGS_PATH}?t=${Date.now()}`;
+  try {
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch { return null; }
+}
+
+export async function ghSaveSettings(s) {
+  if (!s?.ghOwner || !s?.ghRepo || !s?.ghToken) throw new Error("חסרים פרטי GitHub בהגדרות");
+  const branch = s.ghBranch || "main";
+  const apiUrl = `https://api.github.com/repos/${s.ghOwner}/${s.ghRepo}/contents/${GH_SETTINGS_PATH}`;
+  const headers = { Authorization: `token ${s.ghToken}`, Accept: "application/vnd.github+json" };
+
+  let sha;
+  try {
+    const getRes = await fetch(`${apiUrl}?ref=${branch}`, { headers });
+    if (getRes.ok) sha = (await getRes.json()).sha;
+  } catch { /* file may not exist yet */ }
+
+  const publicOnly = Object.fromEntries(PUBLIC_SETTINGS_FIELDS.map(k => [k, s[k]]));
+  const content = b64EncodeUnicode(JSON.stringify(publicOnly, null, 2));
+  const putRes = await fetch(apiUrl, {
+    method: "PUT",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      message: `עדכון הגדרות · ${new Date().toLocaleString("he-IL")}`,
+      content, branch, ...(sha ? { sha } : {}),
+    }),
+  });
+  if (!putRes.ok) {
+    const err = await putRes.json().catch(() => ({}));
+    throw new Error(err.message || `שגיאת GitHub (${putRes.status})`);
+  }
+  return true;
+}
+
+// Lets anonymous visitors create a GitHub Issue (request access / offer to upload)
+// using the narrow, Issues-only PUBLIC_ISSUES_TOKEN — never the admin's private ghToken.
+// Best-effort: if it fails (no token set yet, rate limit, etc.) we just skip silently,
+// since the submission is already saved locally as a fallback.
+export async function ghSubmitIssue(s, title, bodyLines, labels = ["submission"]) {
+  if (!s?.ghOwner || !s?.ghRepo || !PUBLIC_ISSUES_TOKEN) return null;
+  try {
+    const res = await fetch(`https://api.github.com/repos/${s.ghOwner}/${s.ghRepo}/issues`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${PUBLIC_ISSUES_TOKEN}`,
+        Accept: "application/vnd.github+json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ title, body: bodyLines.join("\n"), labels }),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch { return null; }
 }
 
 /* ── CSS (shared visual language for both sites) ── */

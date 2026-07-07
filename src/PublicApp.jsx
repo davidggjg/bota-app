@@ -4,7 +4,7 @@ import {
   Upload, Image as ImageIcon, FileText, Handshake, ChevronRight,
   Users, Grid, Download, Unlock
 } from "lucide-react";
-import { SK, RK, UPK, SETK, norm, ld, sv, countEmoji, fileToB64, addWatermark, defSettings, ghFetchItems, buildSysPrompt, CSS } from "./shared.js";
+import { SK, RK, UPK, SETK, norm, ld, sv, countEmoji, fileToB64, addWatermark, defSettings, ghFetchItems, ghFetchSettings, ghSubmitIssue, buildSysPrompt, CSS } from "./shared.js";
 import { WAIcon, Fl } from "./ui.jsx";
 
 export default function PublicApp() {
@@ -23,7 +23,12 @@ export default function PublicApp() {
   useEffect(()=>{
     setItems(ld(SK,[]));
     setRequests(ld(RK,[]));
-    setSettings({...defSettings,...ld(SETK,{})});
+    const local={...defSettings,...ld(SETK,{})};
+    setSettings(local);
+    (async()=>{
+      const remote=await ghFetchSettings(local);
+      if(remote) setSettings(p=>({...p,...remote}));
+    })();
   },[]);
 
   useEffect(()=>{
@@ -62,6 +67,10 @@ export default function PublicApp() {
     }
     const r={id:Math.random().toString(36).slice(2,9),itemId:item.id,itemTitle:item.title,phone:session.phone,status:"pending",createdAt:Date.now()};
     const u=[...requests,r];setRequests(u);sv(RK,u);setToast("הבקשה נשלחה!");
+    ghSubmitIssue(settings,`בקשת גישה: ${item.title}`,[
+      `פריט: ${item.title} (${item.id})`,
+      `טלפון: ${session.phone}`,
+    ],["access-request"]);
   }
 
   function submitUpload(data){
@@ -69,6 +78,13 @@ export default function PublicApp() {
     const u={...data,id:Math.random().toString(36).slice(2,9),phone:session.phone,status:"pending",createdAt:Date.now()};
     const arr=[...uploads,u];sv(UPK,arr);
     setToast("הבקשה נשלחה למנהל 🙌");
+    ghSubmitIssue(settings,`הצעת אפליקציה: ${data.title||"ללא כותרת"}`,[
+      `כותרת: ${data.title||"—"}`,
+      `תיאור: ${data.description||"—"}`,
+      `טלפון: ${session.phone}`,
+      data.fileName?`קובץ מצורף: ${data.fileName}`:"",
+      data.fileLink?`קישור: ${data.fileLink}`:"",
+    ].filter(Boolean),["upload-submission"]);
   }
 
   return (
@@ -420,25 +436,40 @@ function AIChatWidget({settings,onClose}){
     const txt=input.trim(); if(!txt||loading)return;
     const newMsgs=[...msgs,{role:"user",content:txt}];
     setMsgs(newMsgs);setInput("");setLoading(true);
-    if(!settings.aiKey){
+    const isGroq=settings.aiProvider==="groq";
+    const key=isGroq?settings.groqKey:settings.aiKey;
+    if(!key){
       setMsgs(p=>[...p,{role:"assistant",content:"הצ'אט לא מוגדר עדיין — למנהל צריך להוסיף מפתח API בהגדרות."}]);
       setLoading(false);return;
     }
     try{
-      const res=await fetch("https://api.anthropic.com/v1/messages",{
-        method:"POST",
-        headers:{
-          "Content-Type":"application/json",
-          "x-api-key":settings.aiKey,
-          "anthropic-version":"2023-06-01",
-          "anthropic-dangerous-direct-browser-access":"true",
-        },
-        body:JSON.stringify({model:"claude-sonnet-4-5",max_tokens:1000,system:buildSysPrompt(settings),
-          messages:newMsgs.slice(1).map(m=>({role:m.role,content:m.content}))})
-      });
-      const data=await res.json();
-      if(!res.ok) throw new Error(data?.error?.message||"שגיאת שרת");
-      const reply=data.content?.[0]?.text||"לא הצלחתי לענות.";
+      let reply;
+      if(isGroq){
+        const res=await fetch("https://api.groq.com/openai/v1/chat/completions",{
+          method:"POST",
+          headers:{"Content-Type":"application/json","Authorization":"Bearer "+key},
+          body:JSON.stringify({model:"llama-3.3-70b-versatile",max_tokens:1000,
+            messages:[{role:"system",content:buildSysPrompt(settings)},...newMsgs.slice(1).map(m=>({role:m.role,content:m.content}))]})
+        });
+        const data=await res.json();
+        if(!res.ok) throw new Error(data?.error?.message||"שגיאת שרת");
+        reply=data.choices?.[0]?.message?.content||"לא הצלחתי לענות.";
+      } else {
+        const res=await fetch("https://api.anthropic.com/v1/messages",{
+          method:"POST",
+          headers:{
+            "Content-Type":"application/json",
+            "x-api-key":key,
+            "anthropic-version":"2023-06-01",
+            "anthropic-dangerous-direct-browser-access":"true",
+          },
+          body:JSON.stringify({model:"claude-sonnet-4-5",max_tokens:1000,system:buildSysPrompt(settings),
+            messages:newMsgs.slice(1).map(m=>({role:m.role,content:m.content}))})
+        });
+        const data=await res.json();
+        if(!res.ok) throw new Error(data?.error?.message||"שגיאת שרת");
+        reply=data.content?.[0]?.text||"לא הצלחתי לענות.";
+      }
       setMsgs(p=>[...p,{role:"assistant",content:reply}]);
     }catch{
       setMsgs(p=>[...p,{role:"assistant",content:"שגיאת חיבור. נסה שנית."}]);
