@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import {
-  Lock, X, ArrowRight, Zap, Bot, Sparkles,
+  Lock, Send, X, ArrowRight, ChevronRight, Zap, Bot, Sparkles,
   Upload, Image as ImageIcon, FileText, Handshake,
   Grid, Download
 } from "lucide-react";
