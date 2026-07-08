@@ -1,11 +1,11 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import {
-  Lock, Unlock, Plus, Pencil, Trash2, Settings, Users, Grid, LogOut,
-  Sparkles, Bell, Upload, Image as ImageIcon, FileText, Eye, EyeOff,
+  Lock, Unlock, Plus, Pencil, Trash2, Settings, Grid, LogOut, Download,
+  Sparkles, Upload, Image as ImageIcon, FileText, Eye, EyeOff,
   Key, ToggleLeft, X, Check, Bot
 } from "lucide-react";
 import {
-  SK, RK, SETK, UPK, ld, sv, fileToB64, addWatermark, defSettings, defDraft,
+  SK, SETK, UPK, ld, sv, fileToB64, addWatermark, defSettings, defDraft,
   ghFetchItems, ghSaveItems, ghSaveSettings, CSS
 } from "./shared.js";
 import { WAIcon, Tog, FRow, Fl, Sec } from "./ui.jsx";
@@ -67,7 +67,6 @@ function PasswordGate({onUnlock}){
 /* ── לוח הניהול המלא ── */
 function AdminDashboard({onLock}){
   const [items,setItems]=useState([]);
-  const [requests,setRequests]=useState([]);
   const [uploads,setUploads]=useState([]);
   const [settings,setSettings]=useState(defSettings);
   const [view,setView]=useState("list");
@@ -78,7 +77,6 @@ function AdminDashboard({onLock}){
 
   useEffect(()=>{
     setItems(ld(SK,[]));
-    setRequests(ld(RK,[]));
     setUploads(ld(UPK,[]));
     setSettings({...defSettings,...ld(SETK,{})});
   },[]);
@@ -97,7 +95,6 @@ function AdminDashboard({onLock}){
   useEffect(()=>{ if(!toast)return; const t=setTimeout(()=>setToast(""),2800); return()=>clearTimeout(t); },[toast]);
 
   const activeItem=useMemo(()=>items.find(i=>i.id===activeId)||null,[items,activeId]);
-  const pendingReq=requests.filter(r=>r.status==="pending").length;
   const pendingUp=uploads.filter(u=>u.status==="pending").length;
 
   async function syncItems(updated){
@@ -109,7 +106,7 @@ function AdminDashboard({onLock}){
   }
 
   function openEditor(item){
-    setDraft(item?{...defDraft,...item}:{...defDraft,allowedPhones:[]});
+    setDraft(item?{...defDraft,...item}:{...defDraft});
     setActiveId(item?.id||null);
     setView("editor");
   }
@@ -133,23 +130,8 @@ function AdminDashboard({onLock}){
     syncItems(u);setToast("נמחק");
   }
 
-  function approveReq(req){
-    const ui=items.map(i=>i.id===req.itemId?{...i,allowedPhones:Array.from(new Set([...(i.allowedPhones||[]),req.phone]))}:i);
-    syncItems(ui);
-    const ur=requests.map(r=>r.id===req.id?{...r,status:"approved"}:r);
-    setRequests(ur);sv(RK,ur);setToast("גישה אושרה ✓");
-  }
-  function rejectReq(req){
-    const ur=requests.map(r=>r.id===req.id?{...r,status:"rejected"}:r);
-    setRequests(ur);sv(RK,ur);setToast("נדחה");
-  }
-  function revokeAccess(item,p){
-    const u=items.map(i=>i.id===item.id?{...i,allowedPhones:(i.allowedPhones||[]).filter(x=>x!==p)}:i);
-    syncItems(u);setToast("גישה בוטלה");
-  }
-
   function approveUpload(up){
-    const newItem={id:Math.random().toString(36).slice(2,9),title:up.title,description:up.description,imageB64:up.imageB64,imageUrl:"",gatedContent:up.fileUrl||up.fileLink||"",fileName:up.fileName,fileSize:up.fileSize,allowedPhones:[],fromPartner:true,partnerPhone:up.phone};
+    const newItem={id:Math.random().toString(36).slice(2,9),title:up.title,description:up.description,imageB64:up.imageB64,imageUrl:"",gatedContent:up.fileUrl||up.fileLink||"",fileName:up.fileName,fileSize:up.fileSize,fromPartner:true};
     const ui=[...items,newItem];syncItems(ui);
     const uu=uploads.map(u=>u.id===up.id?{...u,status:"approved"}:u);
     setUploads(uu);sv(UPK,uu);setToast("אפליקציה עלתה לאתר 🎉");
@@ -170,7 +152,6 @@ function AdminDashboard({onLock}){
 
   const navItems=[
     {key:"list",label:"אפליקציות",icon:<Grid size={14}/>},
-    {key:"admin-req",label:"גישות",icon:<Bell size={14}/>,badge:pendingReq},
     {key:"admin-up",label:"בקשות עלייה",icon:<Upload size={14}/>,badge:pendingUp},
     {key:"admin-settings",label:"הגדרות",icon:<Settings size={14}/>},
   ];
@@ -216,7 +197,6 @@ function AdminDashboard({onLock}){
       <main className="z" style={{maxWidth:1100,margin:"0 auto",padding:"32px 20px 80px"}}>
         {view==="list"&&<ItemList items={items} onEdit={openEditor} onDelete={delItem}/>}
         {view==="editor"&&<Editor draft={draft} setDraft={setDraft} onPublish={publish} onCancel={()=>setView("list")} isEdit={!!activeId}/>}
-        {view==="admin-req"&&<AdminRequests requests={requests} onApprove={approveReq} onReject={rejectReq} items={items} onRevoke={revokeAccess}/>}
         {view==="admin-up"&&<AdminUploads uploads={uploads} onApprove={approveUpload} onReject={rejectUpload}/>}
         {view==="admin-settings"&&<AdminSettings settings={settings} onSave={saveSettings}/>}
       </main>
@@ -256,7 +236,7 @@ function ItemList({items,onEdit,onDelete}){
               <h3 style={{fontWeight:700,marginBottom:4,fontSize:"1rem"}}>{item.title}</h3>
               {item.description&&<p style={{color:"var(--dim)",fontSize:".82rem",lineHeight:1.5,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{item.description}</p>}
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:12,paddingTop:10,borderTop:"1px solid var(--border)"}}>
-                <span className="chip"><Users size={11}/>{(item.allowedPhones||[]).length} מורשים</span>
+                <span className="chip"><Download size={11}/>חופשי להורדה</span>
                 <div style={{display:"flex",gap:6}}>
                   <button onClick={()=>onEdit(item)} className="bg" style={{padding:"5px 8px",border:"none"}}><Pencil size={13}/></button>
                   <button onClick={()=>onDelete(item.id)} className="bg" style={{padding:"5px 8px",border:"none",color:"var(--red)"}}><Trash2 size={13}/></button>
@@ -272,7 +252,7 @@ function ItemList({items,onEdit,onDelete}){
 
 /* ── Editor ── */
 function Editor({draft,setDraft,onPublish,onCancel,isEdit}){
-  const [ph,setPh]=useState("");
+
   const imgRef=useRef();
   const fileRef=useRef();
 
@@ -291,11 +271,6 @@ function Editor({draft,setDraft,onPublish,onCancel,isEdit}){
     setDraft(d=>({...d,fileUrl:b64,fileName:f.name,fileSize:f.size}));
   }
 
-  function addPhone(){
-    const n=(ph||"").replace(/[^0-9]/g,""); if(n.length<9)return;
-    if(!(draft.allowedPhones||[]).includes(n)) setDraft(d=>({...d,allowedPhones:[...(d.allowedPhones||[]),n]}));
-    setPh("");
-  }
 
   return(
     <div style={{maxWidth:680,margin:"0 auto"}} className="fu">
@@ -346,22 +321,6 @@ function Editor({draft,setDraft,onPublish,onCancel,isEdit}){
           </div>
         </Fl>
 
-        <Fl label="מורשים מראש">
-          <div style={{display:"flex",gap:8}}>
-            <input value={ph} onChange={e=>setPh(e.target.value)} onKeyDown={e=>e.key==="Enter"&&(e.preventDefault(),addPhone())} className="inp" style={{flex:1}} placeholder="05XXXXXXXX" inputMode="numeric"/>
-            <button onClick={addPhone} className="bp" style={{padding:"0 16px"}}>הוסף</button>
-          </div>
-          {(draft.allowedPhones||[]).length>0&&(
-            <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:8}}>
-              {draft.allowedPhones.map(p=>(
-                <span key={p} className="chip" style={{color:"var(--text)"}}>
-                  {p}<button onClick={()=>setDraft(d=>({...d,allowedPhones:d.allowedPhones.filter(x=>x!==p)}))} style={{background:"none",border:"none",cursor:"pointer",color:"var(--dim)",padding:0,display:"flex"}}><X size={10}/></button>
-                </span>
-              ))}
-            </div>
-          )}
-        </Fl>
-
         <div style={{display:"flex",gap:10,paddingTop:4}}>
           <button onClick={onPublish} className="bp" style={{flex:1,padding:"12px"}}>{isEdit?"שמור":"פרסם 🚀"}</button>
           <button onClick={onCancel} className="bg" style={{padding:"12px 20px"}}>ביטול</button>
@@ -372,43 +331,6 @@ function Editor({draft,setDraft,onPublish,onCancel,isEdit}){
 }
 
 /* ── Admin Requests ── */
-function AdminRequests({requests,onApprove,onReject,items,onRevoke}){
-  const pending=requests.filter(r=>r.status==="pending");
-  const withAccess=items.filter(i=>(i.allowedPhones||[]).length>0);
-  return(
-    <div style={{maxWidth:700,margin:"0 auto",display:"flex",flexDirection:"column",gap:24}} className="fu">
-      <h2 style={{fontWeight:800,fontSize:"1.25rem"}}>בקשות גישה</h2>
-      <Sec title={`ממתינות (${pending.length})`}>
-        {!pending.length&&<p style={{color:"var(--dim2)",fontSize:".85rem"}}>אין בקשות ממתינות</p>}
-        {pending.map(r=>(
-          <div key={r.id} className="panel panel-hi" style={{padding:"14px 18px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-            <div><p style={{fontWeight:600}}>{r.itemTitle}</p><p style={{color:"var(--dim)",fontSize:".82rem"}}>{r.phone}</p></div>
-            <div style={{display:"flex",gap:8}}>
-              <button onClick={()=>onApprove(r)} className="bp" style={{padding:"7px 10px"}}><Check size={15}/></button>
-              <button onClick={()=>onReject(r)} className="bg" style={{padding:"7px 10px",color:"var(--red)",borderColor:"rgba(239,68,68,.3)"}}><X size={15}/></button>
-            </div>
-          </div>
-        ))}
-      </Sec>
-      <Sec title="גישות פעילות">
-        {!withAccess.length&&<p style={{color:"var(--dim2)",fontSize:".85rem"}}>אין גישות פעילות</p>}
-        {withAccess.map(item=>(
-          <div key={item.id} className="panel" style={{padding:"14px 18px"}}>
-            <p style={{fontWeight:600,marginBottom:10}}>{item.title}</p>
-            <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-              {item.allowedPhones.map(p=>(
-                <span key={p} className="chip" style={{color:"var(--text)"}}>
-                  {p}<button onClick={()=>onRevoke(item,p)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--dim)",padding:0,display:"flex"}}><X size={10}/></button>
-                </span>
-              ))}
-            </div>
-          </div>
-        ))}
-      </Sec>
-    </div>
-  );
-}
-
 /* ── Admin Uploads ── */
 function AdminUploads({uploads,onApprove,onReject}){
   const pending=uploads.filter(u=>u.status==="pending");

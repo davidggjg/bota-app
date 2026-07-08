@@ -1,28 +1,23 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import {
-  Lock, Send, X, ArrowRight, Zap, Bot, Sparkles,
-  Upload, Image as ImageIcon, FileText, Handshake, ChevronRight,
-  Users, Grid, Download, Unlock
+  Lock, X, ArrowRight, Zap, Bot, Sparkles,
+  Upload, Image as ImageIcon, FileText, Handshake,
+  Grid, Download
 } from "lucide-react";
-import { SK, RK, UPK, SETK, norm, ld, sv, countEmoji, fileToB64, addWatermark, defSettings, ghFetchItems, ghFetchSettings, ghSubmitIssue, buildSysPrompt, CSS } from "./shared.js";
+import { SK, UPK, SETK, ld, sv, countEmoji, fileToB64, addWatermark, defSettings, ghFetchItems, ghFetchSettings, ghSubmitIssue, buildSysPrompt, CSS } from "./shared.js";
 import { WAIcon, Fl } from "./ui.jsx";
 
 export default function PublicApp() {
-  const [phone,setPhone]=useState("");
-  const [session,setSession]=useState(null);
   const [items,setItems]=useState([]);
-  const [requests,setRequests]=useState([]);
   const [settings,setSettings]=useState(defSettings);
-  const [view,setView]=useState("login");
+  const [view,setView]=useState("list");
   const [activeId,setActiveId]=useState(null);
   const [toast,setToast]=useState("");
   const [chatOpen,setChatOpen]=useState(false);
   const [partnerOpen,setPartnerOpen]=useState(false);
-  const [phoneErr,setPhoneErr]=useState("");
 
   useEffect(()=>{
     setItems(ld(SK,[]));
-    setRequests(ld(RK,[]));
     const local={...defSettings,...ld(SETK,{})};
     setSettings(local);
     (async()=>{
@@ -45,43 +40,14 @@ export default function PublicApp() {
 
   const activeItem=useMemo(()=>items.find(i=>i.id===activeId)||null,[items,activeId]);
 
-  function login(e){
-    e?.preventDefault();
-    const n=norm(phone);
-    if(n.length<9){setPhoneErr("מספר לא תקין");return;}
-    setSession({phone:n});
-    if(settings.siteLocked){setView("locked");}
-    else{setView("list");}
-    setPhoneErr("");
-  }
-  function logout(){setSession(null);setPhone("");setView("login");}
-
-  function hasAccess(item){
-    if(!item)return false;
-    return(item.allowedPhones||[]).includes(session.phone);
-  }
-
-  function requestAccess(item){
-    if(requests.find(r=>r.itemId===item.id&&r.phone===session.phone&&r.status==="pending")){
-      setToast("הבקשה כבר ממתינה");return;
-    }
-    const r={id:Math.random().toString(36).slice(2,9),itemId:item.id,itemTitle:item.title,phone:session.phone,status:"pending",createdAt:Date.now()};
-    const u=[...requests,r];setRequests(u);sv(RK,u);setToast("הבקשה נשלחה!");
-    ghSubmitIssue(settings,`בקשת גישה: ${item.title}`,[
-      `פריט: ${item.title} (${item.id})`,
-      `טלפון: ${session.phone}`,
-    ],["access-request"]);
-  }
-
   function submitUpload(data){
     const uploads=ld(UPK,[]);
-    const u={...data,id:Math.random().toString(36).slice(2,9),phone:session.phone,status:"pending",createdAt:Date.now()};
+    const u={...data,id:Math.random().toString(36).slice(2,9),status:"pending",createdAt:Date.now()};
     const arr=[...uploads,u];sv(UPK,arr);
     setToast("הבקשה נשלחה למנהל 🙌");
     ghSubmitIssue(settings,`הצעת אפליקציה: ${data.title||"ללא כותרת"}`,[
       `כותרת: ${data.title||"—"}`,
       `תיאור: ${data.description||"—"}`,
-      `טלפון: ${session.phone}`,
       data.fileName?`קובץ מצורף: ${data.fileName}`:"",
       data.fileLink?`קישור: ${data.fileLink}`:"",
     ].filter(Boolean),["upload-submission"]);
@@ -103,37 +69,38 @@ export default function PublicApp() {
         </div>
       )}
 
-      {session&&(
-        <header className="z" style={{borderBottom:"1px solid var(--border)",backdropFilter:"blur(20px)",position:"sticky",top:0,zIndex:100,background:"rgba(7,9,15,.85)"}}>
-          <div style={{maxWidth:1100,margin:"0 auto",padding:"0 20px",height:62,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-            <div style={{display:"flex",alignItems:"center",gap:10}}>
-              <div style={{width:34,height:34,borderRadius:10,background:"linear-gradient(135deg,var(--p1),var(--cyan))",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 14px -4px rgba(124,58,237,.6)"}}>
-                <Zap size={17} color="#fff"/>
-              </div>
-              <span className="grad" style={{fontWeight:800,fontSize:"1.15rem"}}>BOTA</span>
-              <span className="hide-sm" style={{fontSize:".7rem",color:"var(--dim2)"}}>אפליקציות שאין בחנות</span>
+      <header className="z" style={{borderBottom:"1px solid var(--border)",backdropFilter:"blur(20px)",position:"sticky",top:0,zIndex:100,background:"rgba(7,9,15,.85)"}}>
+        <div style={{maxWidth:1100,margin:"0 auto",padding:"0 20px",height:62,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <div style={{width:34,height:34,borderRadius:10,background:"linear-gradient(135deg,var(--p1),var(--cyan))",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 14px -4px rgba(124,58,237,.6)"}}>
+              <Zap size={17} color="#fff"/>
             </div>
-            <nav style={{display:"flex",alignItems:"center",gap:6}}>
-              {settings.whatsappLink&&(
-                <a href={settings.whatsappLink} target="_blank" rel="noopener noreferrer" className="bgreen"
-                  style={{padding:"7px 12px",fontSize:".8rem",display:"flex",alignItems:"center",gap:5,textDecoration:"none"}}>
-                  <WAIcon/>קבוצה
-                </a>
-              )}
-              <button onClick={logout} className="bg" style={{padding:"7px 12px",fontSize:".8rem"}}>יציאה</button>
-            </nav>
+            <span className="grad" style={{fontWeight:800,fontSize:"1.15rem"}}>BOTA</span>
+            <span className="hide-sm" style={{fontSize:".7rem",color:"var(--dim2)"}}>אפליקציות שאין בחנות</span>
           </div>
-        </header>
-      )}
+          <nav style={{display:"flex",alignItems:"center",gap:6}}>
+            {settings.whatsappLink&&(
+              <a href={settings.whatsappLink} target="_blank" rel="noopener noreferrer" className="bgreen"
+                style={{padding:"7px 12px",fontSize:".8rem",display:"flex",alignItems:"center",gap:5,textDecoration:"none"}}>
+                <WAIcon/>קבוצה
+              </a>
+            )}
+          </nav>
+        </div>
+      </header>
 
       <main className="z" style={{maxWidth:1100,margin:"0 auto",padding:"32px 20px 120px"}}>
-        {view==="login"&&<LoginScreen phone={phone} setPhone={setPhone} onSubmit={login} error={phoneErr}/>}
-        {view==="list"&&session&&<ItemList items={items} onView={id=>{setActiveId(id);setView("item");}}/>}
-        {view==="item"&&activeItem&&<ItemView item={activeItem} access={hasAccess(activeItem)} session={session} onBack={()=>setView("list")} onRequest={()=>requestAccess(activeItem)} requests={requests}/>}
-        {view==="locked"&&session&&<LockedScreen onLogout={logout}/>}
+        {settings.siteLocked?(
+          <LockedScreen/>
+        ):(
+          <>
+            {view==="list"&&<ItemList items={items} onView={id=>{setActiveId(id);setView("item");}}/>}
+            {view==="item"&&activeItem&&<ItemView item={activeItem} onBack={()=>setView("list")}/>}
+          </>
+        )}
       </main>
 
-      {session&&(
+      {!settings.siteLocked&&(
         <>
           <button onClick={()=>setPartnerOpen(true)} className="bgreen pulse"
             style={{position:"fixed",bottom:90,left:24,width:52,height:52,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200,padding:0,border:"none"}}>
@@ -148,36 +115,8 @@ export default function PublicApp() {
         </>
       )}
 
-      {partnerOpen&&session&&<PartnershipModal onClose={()=>setPartnerOpen(false)} onSubmit={submitUpload}/>}
-      {chatOpen&&session&&<AIChatWidget settings={settings} onClose={()=>setChatOpen(false)}/>}
-    </div>
-  );
-}
-
-/* ── Login ── */
-function LoginScreen({phone,setPhone,onSubmit,error}){
-  return(
-    <div style={{minHeight:"70vh",display:"flex",alignItems:"center",justifyContent:"center"}}>
-      <div style={{width:"100%",maxWidth:380}}>
-        <div className="fu" style={{textAlign:"center",marginBottom:36}}>
-          <div style={{width:70,height:70,borderRadius:20,background:"linear-gradient(135deg,var(--p1),var(--cyan))",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 18px",boxShadow:"0 8px 32px -8px rgba(124,58,237,.7)",animation:"pulse-ring 2.5s ease infinite"}}>
-            <Zap size={28} color="#fff"/>
-          </div>
-          <h1 className="grad" style={{fontSize:"2rem",fontWeight:900,marginBottom:6}}>BOTA</h1>
-          <p style={{color:"var(--dim)",fontSize:".9rem"}}>אפליקציות שאין בחנות · גישה פרטית</p>
-        </div>
-        <div className="panel fu d1" style={{padding:28}}>
-          <form onSubmit={onSubmit} style={{display:"flex",flexDirection:"column",gap:14}}>
-            <Fl label="מספר טלפון">
-              <input value={phone} onChange={e=>setPhone(e.target.value)} placeholder="05XXXXXXXX" inputMode="numeric" className="inp" style={{textAlign:"center",fontSize:"1.1rem",letterSpacing:".1em"}} autoFocus/>
-            </Fl>
-            {error&&<p style={{color:"var(--red)",fontSize:".8rem",textAlign:"center"}}>{error}</p>}
-            <button type="submit" className="bp" style={{padding:"12px",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-              כניסה <ArrowRight size={16}/>
-            </button>
-          </form>
-        </div>
-      </div>
+      {partnerOpen&&<PartnershipModal onClose={()=>setPartnerOpen(false)} onSubmit={submitUpload}/>}
+      {chatOpen&&<AIChatWidget settings={settings} onClose={()=>setChatOpen(false)}/>}
     </div>
   );
 }
@@ -214,7 +153,7 @@ function ItemList({items,onView}){
               <h3 style={{fontWeight:700,marginBottom:4,fontSize:"1rem"}}>{item.title}</h3>
               {item.description&&<p style={{color:"var(--dim)",fontSize:".82rem",lineHeight:1.5,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{item.description}</p>}
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:12,paddingTop:10,borderTop:"1px solid var(--border)"}}>
-                <span className="chip"><Users size={11}/>{(item.allowedPhones||[]).length} מורשים</span>
+                <span className="chip"><Download size={11}/>חופשי להורדה</span>
               </div>
             </div>
           </div>
@@ -225,8 +164,7 @@ function ItemList({items,onView}){
 }
 
 /* ── Item View ── */
-function ItemView({item,access,session,onBack,onRequest,requests}){
-  const myReq=requests.find(r=>r.itemId===item.id&&r.phone===session.phone);
+function ItemView({item,onBack}){
   return(
     <div style={{maxWidth:700,margin:"0 auto"}} className="fi">
       <button onClick={onBack} className="bg" style={{display:"flex",alignItems:"center",gap:6,padding:"8px 14px",fontSize:".82rem",marginBottom:20,border:"none"}}>
@@ -243,31 +181,13 @@ function ItemView({item,access,session,onBack,onRequest,requests}){
           <h1 className="grad" style={{fontSize:"1.9rem",fontWeight:900,marginBottom:10}}>{item.title}</h1>
           {item.description&&<p style={{color:"var(--dim)",lineHeight:1.7,marginBottom:18,whiteSpace:"pre-wrap"}}>{item.description}</p>}
           <div className="dg" style={{margin:"20px 0"}}/>
-          {access?(
-            <div className="panel" style={{padding:20,background:"rgba(6,182,212,.06)",borderColor:"rgba(6,182,212,.25)"}}>
-              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
-                <div style={{width:32,height:32,borderRadius:10,background:"linear-gradient(135deg,var(--cyan),var(--p3))",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                  <Unlock size={15} color="#fff"/>
-                </div>
-                <span style={{fontWeight:700,color:"var(--cyan)"}}>גישה מאושרת</span>
-              </div>
-              {(item.fileUrl||item.gatedContent)&&(
-                <a href={item.fileUrl||item.gatedContent} download={item.fileName||undefined} target="_blank" rel="noopener noreferrer"
-                  className="bp" style={{display:"inline-flex",alignItems:"center",gap:8,padding:"10px 20px",textDecoration:"none",marginBottom:12}}>
-                  <Download size={15}/>{item.fileName?"הורד קובץ":"קישור להורדה"}
-                </a>
-              )}
-            </div>
+          {(item.fileUrl||item.gatedContent)?(
+            <a href={item.fileUrl||item.gatedContent} download={item.fileName||undefined} target="_blank" rel="noopener noreferrer"
+              className="bp" style={{display:"inline-flex",alignItems:"center",gap:8,padding:"10px 20px",textDecoration:"none"}}>
+              <Download size={15}/>{item.fileName?"הורד קובץ":"קישור להורדה"}
+            </a>
           ):(
-            <div style={{textAlign:"center",padding:"28px 20px"}}>
-              <div style={{width:52,height:52,borderRadius:16,background:"var(--glass2)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px",border:"1px solid var(--border)"}}>
-                <Lock size={20} style={{color:"var(--dim)"}}/>
-              </div>
-              {!myReq&&<><p style={{color:"var(--dim)",marginBottom:14,fontSize:".9rem"}}>תוכן זה דורש אישור גישה</p>
-                <button onClick={onRequest} className="bp" style={{padding:"11px 24px",display:"inline-flex",alignItems:"center",gap:8}}><Send size={14}/>בקש גישה</button></>}
-              {myReq?.status==="pending"&&<p style={{color:"var(--dim)"}}>⏳ הבקשה ממתינה לאישור</p>}
-              {myReq?.status==="rejected"&&<p style={{color:"var(--red)"}}>הבקשה נדחתה</p>}
-            </div>
+            <p style={{color:"var(--dim2)",fontSize:".85rem"}}>אין עדיין קובץ להורדה עבור פריט זה</p>
           )}
         </div>
       </div>
@@ -276,7 +196,7 @@ function ItemView({item,access,session,onBack,onRequest,requests}){
 }
 
 /* ── Locked Screen ── */
-function LockedScreen({onLogout}){
+function LockedScreen(){
   return(
     <div style={{minHeight:"70vh",display:"flex",alignItems:"center",justifyContent:"center"}}>
       <div className="fu" style={{textAlign:"center",maxWidth:340}}>
@@ -284,8 +204,7 @@ function LockedScreen({onLogout}){
           <Lock size={30} color="#fff"/>
         </div>
         <h2 style={{fontSize:"1.6rem",fontWeight:900,marginBottom:10}}>האתר נעול</h2>
-        <p style={{color:"var(--dim)",lineHeight:1.7,marginBottom:26}}>הגישה מוגבלת כרגע.<br/>לקבלת גישה פנה למנהל.</p>
-        <button onClick={onLogout} className="bg" style={{padding:"10px 24px"}}>חזור לכניסה</button>
+        <p style={{color:"var(--dim)",lineHeight:1.7}}>הגישה מוגבלת כרגע.</p>
       </div>
     </div>
   );
